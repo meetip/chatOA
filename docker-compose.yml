@@ -1,0 +1,121 @@
+version: "3.8"
+
+services:
+  # =================================================================
+  # Dify.ai Setup (Simplified for local testing/PoC)
+  # =================================================================
+  dify-api:
+    image: langgenius/dify-api:latest
+    restart: always
+    environment:
+      - MODE=api
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=dify_password
+      - DB_HOST=dify-db
+      - DB_PORT=5432
+      - DB_DATABASE=dify
+      - REDIS_HOST=dify-redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=dify_redis_password
+      - CELERY_BROKER_URL=redis://:dify_redis_password@dify-redis:6379/1
+      - SECRET_KEY=replace_with_your_dify_secret_key
+      - STORAGE_TYPE=local
+      - STORAGE_LOCAL_PATH=/app/api/storage
+    depends_on:
+      - dify-db
+      - dify-redis
+    ports:
+      - "5001:5001"
+
+  dify-web:
+    image: langgenius/dify-web:latest
+    restart: always
+    environment:
+      - CONSOLE_API_URL=http://dify-api:5001
+      - APP_API_URL=http://dify-api:5001
+    ports:
+      - "3001:3000"
+    depends_on:
+      - dify-api
+
+  dify-db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      - POSTGRES_PASSWORD=dify_password
+      - POSTGRES_DB=dify
+      - POSTGRES_USER=postgres
+    volumes:
+      - dify_db_data:/var/lib/postgresql/data
+
+  dify-redis:
+    image: redis:6-alpine
+    restart: always
+    command: redis-server --requirepass dify_redis_password
+    volumes:
+      - dify_redis_data:/data
+
+  # =================================================================
+  # Chatwoot Setup (Simplified for local testing/PoC)
+  # =================================================================
+  chatwoot:
+    image: chatwoot/chatwoot:latest
+    restart: always
+    environment:
+      - SECRET_KEY_BASE=replace_with_urandom_string
+      - FRONTEND_URL=http://localhost:3002
+      - DEFAULT_LOCALE=th
+      - FORCE_SSL=false
+      - POSTGRES_DATABASE=chatwoot
+      - POSTGRES_HOST=chatwoot-db
+      - POSTGRES_USERNAME=postgres
+      - POSTGRES_PASSWORD=chatwoot_password
+      - REDIS_URL=redis://chatwoot-redis:6379
+    ports:
+      - "3002:3000"
+    depends_on:
+      - chatwoot-db
+      - chatwoot-redis
+    command: >
+      sh -c "bundle exec rails db:chatwoot_prepare && bundle exec rails s -p 3000 -b 0.0.0.0"
+
+  chatwoot-worker:
+    image: chatwoot/chatwoot:latest
+    restart: always
+    environment:
+      - SECRET_KEY_BASE=replace_with_urandom_string
+      - FRONTEND_URL=http://localhost:3002
+      - DEFAULT_LOCALE=th
+      - FORCE_SSL=false
+      - POSTGRES_DATABASE=chatwoot
+      - POSTGRES_HOST=chatwoot-db
+      - POSTGRES_USERNAME=postgres
+      - POSTGRES_PASSWORD=chatwoot_password
+      - REDIS_URL=redis://chatwoot-redis:6379
+      - ACTIVE_JOB_LOG_LEVEL=info
+    depends_on:
+      - chatwoot-db
+      - chatwoot-redis
+    command: >
+      sh -c "bundle exec sidekiq -C config/sidekiq.yml"
+
+  chatwoot-db:
+    image: pgvector/pgvector:pg15
+    restart: always
+    environment:
+      - POSTGRES_PASSWORD=chatwoot_password
+      - POSTGRES_USER=postgres
+    volumes:
+      - chatwoot_db_data:/var/lib/postgresql/data
+
+  chatwoot-redis:
+    image: redis:6-alpine
+    restart: always
+    volumes:
+      - chatwoot_redis_data:/data
+
+volumes:
+  dify_db_data:
+  dify_redis_data:
+  chatwoot_db_data:
+  chatwoot_redis_data:
